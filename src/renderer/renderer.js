@@ -25,6 +25,7 @@ init();
 async function init() {
   bindEvents();
   await hydrateVersion();
+  await hydrateSettings();
   checkUpdates(false);
 
   window.gfxConv.onConversionProgress((update) => {
@@ -45,9 +46,7 @@ async function init() {
 function bindEvents() {
   modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      state.mode = button.dataset.mode;
-      modeButtons.forEach((item) => item.classList.toggle("active", item === button));
-      videoSettings.classList.toggle("hidden", state.mode !== "video");
+      setMode(button.dataset.mode, true);
     });
   });
 
@@ -60,6 +59,7 @@ function bindEvents() {
 
     state.outputDir = selectedDir;
     outputDirInput.value = selectedDir;
+    saveCurrentSettings();
   });
 
   openOutputButton.addEventListener("click", () => {
@@ -92,11 +92,30 @@ function bindEvents() {
     await addFiles(filePicker.files);
     filePicker.value = "";
   });
+
+  durationInput.addEventListener("change", () => {
+    durationInput.value = clampInteger(durationInput.value, 4, 15, 4);
+    saveCurrentSettings();
+  });
+  align16Input.addEventListener("change", saveCurrentSettings);
+  qualityInput.addEventListener("change", saveCurrentSettings);
 }
 
 async function hydrateVersion() {
   const version = await window.gfxConv.getVersion();
   versionLabel.textContent = `v${version}`;
+}
+
+async function hydrateSettings() {
+  const settings = await window.gfxConv.getSettings();
+  const video = settings.video || {};
+
+  state.outputDir = settings.outputDir || "";
+  outputDirInput.value = state.outputDir;
+  durationInput.value = clampInteger(video.durationSeconds, 4, 15, 4);
+  align16Input.checked = video.align16 !== false;
+  qualityInput.value = video.quality === "lossless" ? "lossless" : "visual";
+  setMode(settings.mode === "video" ? "video" : "png", false);
 }
 
 async function addFiles(fileListLike) {
@@ -149,6 +168,38 @@ function getSettings() {
     align16: align16Input.checked,
     quality: qualityInput.value === "lossless" ? "lossless" : "visual"
   };
+}
+
+function setMode(mode, persist) {
+  state.mode = mode === "video" ? "video" : "png";
+  modeButtons.forEach((item) => item.classList.toggle("active", item.dataset.mode === state.mode));
+  videoSettings.classList.toggle("hidden", state.mode !== "video");
+
+  if (persist) {
+    saveCurrentSettings();
+  }
+}
+
+async function saveCurrentSettings() {
+  try {
+    await window.gfxConv.saveSettings({
+      mode: state.mode,
+      outputDir: state.outputDir,
+      video: getSettings()
+    });
+  } catch (error) {
+    showToast(error.message || "Settings were not saved.");
+  }
+}
+
+function clampInteger(value, min, max, fallback) {
+  const number = Number.parseInt(value, 10);
+
+  if (Number.isNaN(number)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, number));
 }
 
 function setControlsDisabled(disabled) {

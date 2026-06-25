@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("gfxConv", {
   openPath: (targetPath) => ipcRenderer.invoke("shell:openPath", targetPath),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
   getVersion: () => ipcRenderer.invoke("app:getVersion"),
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings),
   checkUpdates: () => ipcRenderer.invoke("updates:check"),
   getFilePath: (file) => webUtils.getPathForFile(file),
   onConversionProgress: (callback) => {

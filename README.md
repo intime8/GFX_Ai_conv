@@ -9,6 +9,28 @@ Local Windows converter with a small drag-and-drop interface.
 
 FFmpeg is bundled with the app through `ffmpeg-static`.
 
+## Saved Settings
+
+The app saves settings automatically when you change them:
+
+- selected mode: `PNG` or `H.264 MP4`
+- output folder
+- video duration
+- 16 px grid option
+- video quality option
+
+Settings are stored locally at:
+
+```text
+%LOCALAPPDATA%\GFX Ai Conv\settings.json
+```
+
+Crash logs are stored at:
+
+```text
+%LOCALAPPDATA%\GFX Ai Conv\logs
+```
+
 ## Local Development
 
 ```powershell
@@ -49,3 +71,76 @@ The Electron portable self-extracting target is intentionally not used because i
 ## Notes
 
 H.264 is normally a lossy delivery codec. The default video quality is set to visually lossless CRF 16. A lossless H.264 option is available, but files can become much larger and may be less convenient for downstream tools.
+
+## FAQ
+
+### Which file should I download?
+
+Use the `installer` `.exe` for the normal app install. Use the `win.zip` archive if you want to run the app without installing it.
+
+### Why is there no portable `.exe` anymore?
+
+The Electron portable self-extracting build can crash on some Windows systems because it runs from a temporary extraction folder. The app now ships as an installer plus an unpacked zip, which is more reliable.
+
+### Where are converted files saved?
+
+Converted files are saved to the output folder selected in the app. The selected folder is saved automatically and restored on the next launch.
+
+### Does the app overwrite existing files?
+
+No. If a file with the same output name already exists, the app adds a numeric suffix such as `_1`, `_2`, and so on.
+
+### What does PNG mode do?
+
+PNG mode takes the first video/image frame FFmpeg can read and writes it as `.png`. For static image sources, this is the normal image conversion path. For video sources, it exports the first frame.
+
+### What does H.264 MP4 mode do?
+
+H.264 MP4 mode writes `.mp4` files with `libx264`, `yuv420p`, BT.709 color metadata, and an sRGB transfer tag. The app loops short inputs if needed and trims the result to the selected integer duration from 4 to 15 seconds.
+
+### What does 16 px grid mean?
+
+When enabled, the output video width and height are rounded down to the nearest multiple of 16 pixels. This is useful for technical pipelines that require dimensions aligned to a 16 px grid.
+
+### Is H.264 truly lossless?
+
+The default `Visually lossless` option uses CRF 16, which is high quality but still technically lossy. The `Lossless H.264` option uses CRF 0, but files can become much larger and may not be accepted by every downstream tool.
+
+### Does the app keep audio?
+
+No. H.264 MP4 mode currently exports video only and removes audio.
+
+### How do updates work?
+
+The app checks the latest GitHub Release on startup and when you press the update button. In this version it opens the release page for download instead of installing silently.
+
+### How do I make a new release?
+
+Update `package.json`, commit the changes, create a tag, and push it:
+
+```powershell
+git tag v0.1.2
+git push origin main
+git push origin v0.1.2
+```
+
+If the GitHub Actions workflow is enabled, GitHub builds the Windows files automatically. If the workflow has not been pushed yet, build locally with `npm.cmd run dist` and upload the files in `dist/` to a GitHub Release.
+
+### Why is the workflow file not pushed sometimes?
+
+GitHub requires the CLI token to have the `workflow` scope before it can push `.github/workflows/*.yml`. Refresh it once:
+
+```powershell
+gh auth refresh -h github.com -s workflow
+git push
+```
+
+### What should I do if the app closes immediately?
+
+Use the latest release and prefer the installer or `win.zip`. If it still closes, check:
+
+```text
+%LOCALAPPDATA%\GFX Ai Conv\logs
+```
+
+Also check Windows Event Viewer under `Windows Logs > Application`.

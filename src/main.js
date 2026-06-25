@@ -11,6 +11,16 @@ const REPO_NAME = "GFX_Ai_conv";
 const appDataRoot = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
 const stableUserDataPath = path.join(appDataRoot, "GFX Ai Conv");
 const logDir = path.join(stableUserDataPath, "logs");
+const settingsPath = path.join(stableUserDataPath, "settings.json");
+const DEFAULT_SETTINGS = {
+  mode: "png",
+  outputDir: "",
+  video: {
+    durationSeconds: 4,
+    align16: true,
+    quality: "visual"
+  }
+};
 
 app.disableHardwareAcceleration();
 fs.mkdirSync(stableUserDataPath, { recursive: true });
@@ -128,6 +138,14 @@ ipcMain.handle("shell:openExternal", async (_event, url) => {
 });
 
 ipcMain.handle("app:getVersion", () => app.getVersion());
+
+ipcMain.handle("settings:get", () => loadSettings());
+
+ipcMain.handle("settings:save", (_event, settings) => {
+  const nextSettings = sanitizeSettings(settings);
+  saveSettings(nextSettings);
+  return nextSettings;
+});
 
 ipcMain.handle("updates:check", async () => {
   const currentVersion = app.getVersion();
@@ -371,6 +389,44 @@ function isNewerVersion(latest, current) {
   }
 
   return false;
+}
+
+function loadSettings() {
+  try {
+    if (!fs.existsSync(settingsPath)) {
+      return { ...DEFAULT_SETTINGS, video: { ...DEFAULT_SETTINGS.video } };
+    }
+
+    const raw = fs.readFileSync(settingsPath, "utf8");
+    return sanitizeSettings(JSON.parse(raw));
+  } catch (error) {
+    writeCrashLog("settingsLoad", error);
+    return { ...DEFAULT_SETTINGS, video: { ...DEFAULT_SETTINGS.video } };
+  }
+}
+
+function saveSettings(settings) {
+  const tmpPath = `${settingsPath}.tmp`;
+  fs.writeFileSync(tmpPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  fs.renameSync(tmpPath, settingsPath);
+}
+
+function sanitizeSettings(settings) {
+  const incoming = settings && typeof settings === "object" ? settings : {};
+  const incomingVideo = incoming.video && typeof incoming.video === "object" ? incoming.video : {};
+  const mode = incoming.mode === "video" ? "video" : "png";
+  const outputDir = typeof incoming.outputDir === "string" ? incoming.outputDir : "";
+  const quality = incomingVideo.quality === "lossless" ? "lossless" : "visual";
+
+  return {
+    mode,
+    outputDir,
+    video: {
+      durationSeconds: clampInteger(incomingVideo.durationSeconds, 4, 15, DEFAULT_SETTINGS.video.durationSeconds),
+      align16: incomingVideo.align16 !== false,
+      quality
+    }
+  };
 }
 
 function writeCrashLog(kind, error) {
