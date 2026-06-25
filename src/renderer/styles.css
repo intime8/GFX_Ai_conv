@@ -1,8 +1,8 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: Inter, "Segoe UI", Arial, sans-serif;
-  background: #f5f6f8;
-  color: #1d2430;
+  background: #0d1117;
+  color: #edf2f7;
 }
 
 * {
@@ -12,9 +12,7 @@
 body {
   margin: 0;
   min-width: 760px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 246, 248, 0.96)),
-    #f5f6f8;
+  background: #0d1117;
 }
 
 button,
@@ -24,17 +22,18 @@ select {
 }
 
 button {
-  border: 1px solid #c7ced8;
+  border: 1px solid #334155;
   border-radius: 6px;
-  background: #ffffff;
-  color: #1d2430;
+  background: #151b23;
+  color: #edf2f7;
   cursor: pointer;
   min-height: 38px;
   padding: 0 14px;
 }
 
 button:hover {
-  border-color: #6a7a92;
+  border-color: #5ba4c7;
+  background: #1b2430;
 }
 
 button:disabled {
@@ -75,7 +74,7 @@ h2 {
 
 #versionLabel {
   margin-top: 4px;
-  color: #657184;
+  color: #8b98a8;
   font-size: 13px;
 }
 
@@ -98,16 +97,16 @@ h2 {
 }
 
 .mode-button.active {
-  border-color: #176b87;
+  border-color: #2aa6c9;
   background: #176b87;
   color: #ffffff;
 }
 
 .controls,
 .status-panel {
-  border: 1px solid #d9dee6;
+  border: 1px solid #2b3645;
   border-radius: 8px;
-  background: #ffffff;
+  background: #111820;
 }
 
 .controls {
@@ -125,7 +124,7 @@ h2 {
 
 .output-row label,
 .video-settings label {
-  color: #3d4654;
+  color: #c9d3df;
   font-size: 13px;
   font-weight: 650;
 }
@@ -134,22 +133,34 @@ input,
 select {
   width: 100%;
   min-height: 38px;
-  border: 1px solid #c7ced8;
+  border: 1px solid #334155;
   border-radius: 6px;
-  background: #ffffff;
-  color: #1d2430;
+  background: #0d1117;
+  color: #edf2f7;
   padding: 0 10px;
 }
 
 .video-settings {
-  grid-template-columns: 78px 84px 112px 120px 58px 170px 64px 150px;
+  grid-template-columns: minmax(132px, 160px) minmax(122px, 142px) minmax(210px, 260px) minmax(170px, 210px);
   margin-top: 12px;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span {
+  display: block;
 }
 
 .checkline {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 38px;
+  align-self: end;
 }
 
 .checkline input {
@@ -166,16 +177,16 @@ select {
   display: grid;
   place-items: center;
   min-height: 230px;
-  border: 2px dashed #aab4c2;
+  border: 2px dashed #43546a;
   border-radius: 8px;
-  background: #eef3f6;
+  background: #0f1720;
   margin-bottom: 12px;
   transition: border-color 120ms ease, background 120ms ease;
 }
 
 .dropzone.dragover {
-  border-color: #176b87;
-  background: #e5f1f5;
+  border-color: #2aa6c9;
+  background: #122331;
 }
 
 .dropzone input {
@@ -197,7 +208,7 @@ select {
 }
 
 .dropzone-inner span {
-  color: #657184;
+  color: #8b98a8;
 }
 
 .status-panel {
@@ -226,10 +237,10 @@ select {
   align-items: center;
   gap: 10px;
   min-height: 50px;
-  border: 1px solid #e0e5ec;
+  border: 1px solid #2b3645;
   border-radius: 8px;
   padding: 8px 10px;
-  background: #fbfcfd;
+  background: #0d1117;
 }
 
 .file-name {
@@ -243,7 +254,7 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #657184;
+  color: #8b98a8;
   font-size: 12px;
 }
 
@@ -254,26 +265,26 @@ select {
   min-width: 86px;
   min-height: 28px;
   border-radius: 999px;
-  background: #e7ebf0;
-  color: #3d4654;
+  background: #243244;
+  color: #c9d3df;
   font-size: 12px;
   font-weight: 750;
   text-transform: uppercase;
 }
 
 .pill.converting {
-  background: #fff1cb;
-  color: #805900;
+  background: #4a3715;
+  color: #ffd580;
 }
 
 .pill.done {
-  background: #dff5e8;
-  color: #17623a;
+  background: #153a28;
+  color: #8de0b1;
 }
 
 .pill.error {
-  background: #ffe1df;
-  color: #9d251d;
+  background: #4a1f1d;
+  color: #ff9c94;
 }
 
 .toast {
@@ -281,9 +292,9 @@ select {
   right: 22px;
   bottom: 22px;
   max-width: 420px;
-  border: 1px solid #c7ced8;
+  border: 1px solid #334155;
   border-radius: 8px;
-  background: #1d2430;
+  background: #151b23;
   color: #ffffff;
   padding: 12px 14px;
   box-shadow: 0 12px 34px rgba(28, 37, 48, 0.24);

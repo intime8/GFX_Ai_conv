@@ -76,7 +76,7 @@ function createWindow() {
     height: 760,
     minWidth: 860,
     minHeight: 620,
-    backgroundColor: "#f5f6f8",
+    backgroundColor: "#0d1117",
     title: "GFX Ai Conv",
     icon: windowIcon,
     webPreferences: {
@@ -114,6 +114,7 @@ app.whenReady().then(() => {
     return;
   }
 
+  Menu.setApplicationMenu(null);
   createTray();
   createWindow();
 
@@ -345,6 +346,12 @@ function createTrayImage(size) {
 }
 
 async function convertOne(inputPath, outputDir, mode, settings) {
+  const inputStats = fs.statSync(inputPath);
+
+  if (inputStats.isDirectory()) {
+    return convertDirectory(inputPath, outputDir, mode, settings);
+  }
+
   if (mode === "png") {
     const outputPath = uniqueOutputPath(outputDir, inputPath, ".png");
     const args = [
@@ -382,6 +389,76 @@ async function convertOne(inputPath, outputDir, mode, settings) {
     "-1",
     "-i",
     inputPath,
+    "-t",
+    String(duration),
+    "-map",
+    "0:v:0",
+    "-an",
+    "-vf",
+    filters,
+    ...encoderArgs,
+    ...qualityArgs,
+    "-pix_fmt",
+    "yuv420p",
+    "-color_primaries",
+    "bt709",
+    "-color_trc",
+    "iec61966-2-1",
+    "-colorspace",
+    "bt709",
+    "-movflags",
+    "+faststart",
+    outputPath
+  ];
+
+  await runFfmpeg(args);
+  return outputPath;
+}
+
+async function convertDirectory(inputPath, outputDir, mode, settings) {
+  const sequence = findExrSequence(inputPath);
+
+  if (mode === "png") {
+    const outputPath = uniqueOutputPath(outputDir, inputPath, ".png");
+    const args = [
+      "-hide_banner",
+      "-y",
+      "-i",
+      sequence.firstFile,
+      "-map",
+      "0:v:0",
+      "-frames:v",
+      "1",
+      "-update",
+      "1",
+      "-compression_level",
+      "6",
+      outputPath
+    ];
+
+    await runFfmpeg(args);
+    return outputPath;
+  }
+
+  const outputPath = uniqueOutputPath(outputDir, inputPath, ".mp4", "_h264");
+  const duration = clampInteger(settings.durationSeconds, 4, 15, 4);
+  const filters = buildVideoFilters(Boolean(settings.align16));
+  const qualityArgs = buildQualityArgs(settings.encoder, settings.quality === "lossless");
+  const encoderArgs = settings.encoder === "cpu"
+    ? ["-c:v", "libx264"]
+    : ["-c:v", "h264_nvenc"];
+
+  const args = [
+    "-hide_banner",
+    "-y",
+    "-stream_loop",
+    "-1",
+    "-framerate",
+    "25",
+    "-start_number",
+    String(sequence.startNumber),
+    "-i",
+    sequence.pattern,
     "-t",
     String(duration),
     "-map",
@@ -451,6 +528,72 @@ function runFfmpeg(args) {
       reject(new Error(compactFfmpegError(stderr) || `FFmpeg exited with code ${code}.`));
     });
   });
+}
+
+function findExrSequence(directoryPath) {
+  const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".exr"));
+
+  if (entries.length === 0) {
+    throw new Error("The folder does not contain EXR files.");
+  }
+
+  const groups = new Map();
+
+  for (const entry of entries) {
+    const match = entry.name.match(/^(.*?)(\d+)(\.exr)$/i);
+
+    if (!match) {
+      continue;
+    }
+
+    const [, prefix, digits, suffix] = match;
+    const key = `${prefix}\u0000${digits.length}\u0000${suffix.toLowerCase()}`;
+    const group = groups.get(key) || {
+      prefix,
+      suffix,
+      width: digits.length,
+      frames: []
+    };
+
+    group.frames.push({
+      number: Number.parseInt(digits, 10),
+      name: entry.name
+    });
+    groups.set(key, group);
+  }
+
+  const sequence = Array.from(groups.values())
+    .sort((left, right) => right.frames.length - left.frames.length)[0];
+
+  if (!sequence || sequence.frames.length === 0) {
+    throw new Error("EXR files need numbered names, for example shot_0001.exr.");
+  }
+
+  const frames = sequence.frames
+    .sort((left, right) => left.number - right.number)
+    .filter((frame, index, list) => index === 0 || frame.number !== list[index - 1].number);
+  const startNumber = frames[0].number;
+
+  for (let index = 0; index < frames.length; index += 1) {
+    const expected = startNumber + index;
+
+    if (frames[index].number !== expected) {
+      throw new Error(`EXR sequence has a gap at frame ${expected}.`);
+    }
+  }
+
+  const patternName = `${sequence.prefix}%0${sequence.width}d${sequence.suffix}`;
+
+  return {
+    startNumber,
+    firstFile: path.join(directoryPath, frames[0].name),
+    pattern: normalizeFfmpegPath(path.join(directoryPath, patternName))
+  };
+}
+
+function normalizeFfmpegPath(filePath) {
+  return filePath.replace(/\\/g, "/");
 }
 
 function uniqueOutputPath(outputDir, inputPath, extension, suffix = "") {

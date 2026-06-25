@@ -6,6 +6,7 @@ Local Windows converter with a small drag-and-drop interface.
 
 - **PNG**: converts supported image/video sources to `.png`.
 - **H.264 MP4**: converts supported video sources to `.mp4` with H.264 video, NVIDIA NVENC by default, BT.709/sRGB-friendly color metadata, integer duration from 4 to 15 seconds, and optional 16 px dimension alignment.
+- **EXR folders**: in H.264 MP4 mode, a dropped folder with numbered `.exr` files is treated as an image sequence.
 
 FFmpeg is bundled with the app through `ffmpeg-static`.
 
@@ -108,6 +109,26 @@ PNG mode takes the first video/image frame FFmpeg can read and writes it as `.pn
 ### What does H.264 MP4 mode do?
 
 H.264 MP4 mode writes `.mp4` files with `h264_nvenc` by default, `yuv420p`, BT.709 color metadata, and an sRGB transfer tag. The app loops short inputs if needed and trims the result to the selected integer duration from 4 to 15 seconds.
+
+### Is Duration measured in seconds?
+
+Yes. The `Duration (sec)` field is measured in seconds and accepts integer values from 4 to 15.
+
+### Can I drop an EXR sequence folder?
+
+Yes. In H.264 MP4 mode, drop the folder that contains the numbered `.exr` sequence. The app uses the largest numbered EXR sequence in that folder and converts it to MP4.
+
+Supported naming examples:
+
+```text
+shot_0001.exr
+shot_0002.exr
+shot_0003.exr
+```
+
+The sequence must be continuous. If a frame is missing, the app reports the missing frame number instead of silently making a broken video.
+
+EXR folders are read at 25 fps, then looped or trimmed to the selected `Duration (sec)`.
 
 ### Why is NVIDIA GPU the default encoder?
 

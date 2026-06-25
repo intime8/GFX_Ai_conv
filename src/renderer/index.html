@@ -13,7 +13,7 @@
           <h1>GFX Ai Conv</h1>
           <p id="versionLabel">Local converter</p>
         </div>
-        <button class="icon-button" id="updateButton" title="Check for updates" type="button">↻</button>
+        <button class="icon-button" id="updateButton" title="Check for updates" type="button">U</button>
       </header>
 
       <section class="toolbar" aria-label="Conversion mode">
@@ -29,32 +29,38 @@
         </div>
 
         <div class="video-settings hidden" id="videoSettings">
-          <label for="durationInput">Duration</label>
-          <input id="durationInput" type="number" min="4" max="15" step="1" value="4">
+          <label class="field" for="durationInput">
+            <span>Duration (sec)</span>
+            <input id="durationInput" type="number" min="4" max="15" step="1" value="4">
+          </label>
 
           <label class="checkline" for="align16Input">
             <input id="align16Input" type="checkbox" checked>
             <span>16 px grid</span>
           </label>
 
-          <label for="qualityInput">Quality</label>
-          <select id="qualityInput">
-            <option value="visual">Visually lossless</option>
-            <option value="lossless">Lossless H.264</option>
-          </select>
+          <label class="field" for="qualityInput">
+            <span>Quality</span>
+            <select id="qualityInput">
+              <option value="visual">Visually lossless</option>
+              <option value="lossless">Lossless H.264</option>
+            </select>
+          </label>
 
-          <label for="encoderInput">Encoder</label>
-          <select id="encoderInput">
-            <option value="gpu">NVIDIA GPU</option>
-            <option value="cpu">CPU x264</option>
-          </select>
+          <label class="field" for="encoderInput">
+            <span>Encoder</span>
+            <select id="encoderInput">
+              <option value="gpu">NVIDIA GPU</option>
+              <option value="cpu">CPU x264</option>
+            </select>
+          </label>
         </div>
       </section>
 
       <section class="dropzone" id="dropzone">
         <input id="filePicker" type="file" multiple>
         <div class="dropzone-inner">
-          <strong>Drop files here</strong>
+          <strong>Drop files or EXR folders here</strong>
           <span>or click to choose files</span>
         </div>
       </section>
