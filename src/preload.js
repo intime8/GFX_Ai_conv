@@ -2,17 +2,26 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("gfxConv", {
   chooseOutputDir: () => ipcRenderer.invoke("dialog:chooseOutputDir"),
+  convertFile: (payload) => ipcRenderer.invoke("convert:file", payload),
   convertFiles: (payload) => ipcRenderer.invoke("convert:files", payload),
+  cancelConversion: () => ipcRenderer.invoke("convert:cancel"),
+  createPreview: (payload) => ipcRenderer.invoke("preview:create", payload),
   openPath: (targetPath) => ipcRenderer.invoke("shell:openPath", targetPath),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
   getVersion: () => ipcRenderer.invoke("app:getVersion"),
   getSettings: () => ipcRenderer.invoke("settings:get"),
   saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings),
   checkUpdates: () => ipcRenderer.invoke("updates:check"),
+  downloadAndInstallUpdate: () => ipcRenderer.invoke("updates:downloadAndInstall"),
   getFilePath: (file) => webUtils.getPathForFile(file),
   onConversionProgress: (callback) => {
     const listener = (_event, update) => callback(update);
     ipcRenderer.on("convert:progress", listener);
     return () => ipcRenderer.removeListener("convert:progress", listener);
+  },
+  onUpdateDownloadProgress: (callback) => {
+    const listener = (_event, update) => callback(update);
+    ipcRenderer.on("updates:downloadProgress", listener);
+    return () => ipcRenderer.removeListener("updates:downloadProgress", listener);
   }
 });

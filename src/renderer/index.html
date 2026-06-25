@@ -13,7 +13,7 @@
           <h1>GFX Ai Conv</h1>
           <p id="versionLabel">Local converter</p>
         </div>
-        <button class="icon-button" id="updateButton" title="Check for updates" type="button">U</button>
+        <button id="updateButton" title="Check for updates" type="button">Updates</button>
       </header>
 
       <section class="toolbar" aria-label="Conversion mode">
@@ -24,7 +24,7 @@
       <section class="controls">
         <div class="output-row">
           <label for="outputDir">Output folder</label>
-          <input id="outputDir" type="text" readonly placeholder="Choose a folder">
+          <input id="outputDir" type="text" readonly placeholder="Choose a folder before adding files">
           <button id="chooseOutput" type="button">Choose</button>
         </div>
 
@@ -57,20 +57,46 @@
         </div>
       </section>
 
-      <section class="dropzone" id="dropzone">
-        <input id="filePicker" type="file" multiple>
+      <section class="dropzone disabled" id="dropzone">
+        <input id="filePicker" type="file" multiple disabled>
         <div class="dropzone-inner">
-          <strong>Drop files or EXR folders here</strong>
-          <span>or click to choose files</span>
+          <strong id="dropTitle">Choose output folder first</strong>
+          <span id="dropSubtitle">Files and EXR folders can be added after output is set</span>
         </div>
       </section>
 
       <section class="status-panel">
         <div class="status-header">
-          <h2>Queue</h2>
-          <button id="openOutput" type="button">Open folder</button>
+          <div>
+            <h2>Queue</h2>
+            <p id="queueSummary">0 items</p>
+          </div>
+          <div class="queue-actions">
+            <button id="startQueue" type="button">Start</button>
+            <button id="pauseQueue" type="button">Pause</button>
+            <button id="stopQueue" type="button">Stop</button>
+            <button id="clearQueue" type="button">Clear</button>
+            <button id="openOutput" type="button">Open folder</button>
+          </div>
         </div>
         <ul class="file-list" id="fileList"></ul>
+      </section>
+
+      <section class="modal hidden" id="updateModal" aria-hidden="true">
+        <div class="modal-panel">
+          <h2 id="updateTitle">Update available</h2>
+          <p id="updateBody"></p>
+          <div class="modal-progress hidden" id="updateProgressWrap">
+            <div class="progress-track">
+              <div class="progress-fill" id="updateProgressFill"></div>
+            </div>
+            <span id="updateProgressText">0%</span>
+          </div>
+          <div class="modal-actions">
+            <button id="downloadUpdate" type="button">Download and install</button>
+            <button id="closeUpdateModal" type="button">Later</button>
+          </div>
+        </div>
       </section>
 
       <div class="toast hidden" id="toast"></div>

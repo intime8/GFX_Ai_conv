@@ -33,6 +33,22 @@ Crash logs are stored at:
 %LOCALAPPDATA%\GFX Ai Conv\logs
 ```
 
+## Queue Workflow
+
+1. Choose an output folder.
+2. Drop files or numbered EXR sequence folders into the app.
+3. Check previews and queue status.
+4. Press `Start`.
+
+The queue supports:
+
+- `Start`: begins converting queued items.
+- `Pause`: pauses the queue after the current item finishes.
+- `Stop`: stops the active FFmpeg process and marks waiting items as stopped.
+- `Clear`: empties the queue.
+
+Each queue item shows a preview, current status, output path or error, and percent progress.
+
 ## Local Development
 
 ```powershell
@@ -152,7 +168,11 @@ No. H.264 MP4 mode currently exports video only and removes audio.
 
 ### How do updates work?
 
-The app checks the latest GitHub Release on startup and when you press the update button. In this version it opens the release page for download instead of installing silently.
+The app checks the latest GitHub Release on startup and when you press `Updates`. If a newer installer exists, the app shows an update window inside the app. Press `Download and install` to download the installer locally and launch it without opening GitHub in the browser.
+
+### Why can't I add files before choosing an output folder?
+
+The app needs a destination before building the queue, so the drop zone is visually blocked until an output folder is selected.
 
 ### How do I make a new release?
 

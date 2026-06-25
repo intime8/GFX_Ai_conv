@@ -3,6 +3,8 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { Readable } = require("stream");
+const { pathToFileURL } = require("url");
 
 const ffmpegStaticPath = require("ffmpeg-static");
 
@@ -12,6 +14,8 @@ const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAA
 const appDataRoot = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
 const stableUserDataPath = path.join(appDataRoot, "GFX Ai Conv");
 const logDir = path.join(stableUserDataPath, "logs");
+const previewsDir = path.join(stableUserDataPath, "previews");
+const updatesDir = path.join(stableUserDataPath, "updates");
 const settingsPath = path.join(stableUserDataPath, "settings.json");
 const DEFAULT_SETTINGS = {
   mode: "png",
@@ -31,6 +35,8 @@ app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 app.commandLine.appendSwitch("disable-gpu-program-cache");
 
 fs.mkdirSync(logDir, { recursive: true });
+fs.mkdirSync(previewsDir, { recursive: true });
+fs.mkdirSync(updatesDir, { recursive: true });
 
 process.on("uncaughtException", (error) => {
   writeCrashLog("uncaughtException", error);
@@ -55,6 +61,7 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let activeConversion = null;
 
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -79,6 +86,7 @@ function createWindow() {
     backgroundColor: "#0d1117",
     title: "GFX Ai Conv",
     icon: windowIcon,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -104,6 +112,10 @@ function createWindow() {
     if (mainWindow === win) {
       mainWindow = null;
     }
+  });
+  win.once("ready-to-show", () => {
+    win.show();
+    win.focus();
   });
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
   return win;
@@ -178,6 +190,106 @@ ipcMain.handle("updates:check", async () => {
   return checkForUpdates();
 });
 
+ipcMain.handle("updates:downloadAndInstall", async (event) => {
+  const result = await checkForUpdates();
+
+  if (!result.ok) {
+    throw new Error(result.error || "Update check failed.");
+  }
+
+  if (!result.hasUpdate || !result.installerAsset) {
+    return { ok: true, installed: false, message: "No installer update is available." };
+  }
+
+  const installerPath = await downloadUpdateInstaller(result.installerAsset, event.sender);
+  spawn(installerPath, [], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false
+  }).unref();
+  isQuitting = true;
+  app.quit();
+
+  return { ok: true, installed: true, installerPath };
+});
+
+ipcMain.handle("preview:create", async (_event, payload) => {
+  const inputPath = payload && payload.path;
+  const id = payload && payload.id ? String(payload.id) : `${Date.now()}`;
+
+  if (!inputPath || !fs.existsSync(inputPath)) {
+    return null;
+  }
+
+  const previewPath = path.join(previewsDir, `${sanitizeFileName(id)}.jpg`);
+  const sourcePath = fs.statSync(inputPath).isDirectory()
+    ? findExrSequence(inputPath).firstFile
+    : inputPath;
+
+  const args = [
+    "-hide_banner",
+    "-y",
+    "-i",
+    sourcePath,
+    "-map",
+    "0:v:0",
+    "-frames:v",
+    "1",
+    "-vf",
+    "scale=180:-1:flags=lanczos",
+    "-q:v",
+    "3",
+    previewPath
+  ];
+
+  await runFfmpeg(args, { trackActive: false });
+  return pathToFileURL(previewPath).href;
+});
+
+ipcMain.handle("convert:cancel", async () => {
+  if (activeConversion && activeConversion.child) {
+    activeConversion.cancelled = true;
+    activeConversion.child.kill("SIGTERM");
+  }
+
+  return { ok: true };
+});
+
+ipcMain.handle("convert:file", async (event, payload) => {
+  const file = payload && payload.file;
+  const outputDir = payload && payload.outputDir;
+  const mode = payload && payload.mode;
+  const settings = payload && payload.settings ? payload.settings : {};
+
+  if (!file || !file.path) {
+    throw new Error("Input file is missing.");
+  }
+
+  if (!outputDir || !fs.existsSync(outputDir)) {
+    throw new Error("Output folder does not exist.");
+  }
+
+  if (!["png", "video"].includes(mode)) {
+    throw new Error("Unknown conversion mode.");
+  }
+
+  const id = file.id;
+  const inputPath = file.path;
+
+  if (!fs.existsSync(inputPath)) {
+    throw new Error("Input file does not exist.");
+  }
+
+  event.sender.send("convert:progress", { id, inputPath, progress: 0, status: "converting" });
+  const outputPath = await convertOne(inputPath, outputDir, mode, settings, {
+    id,
+    sender: event.sender
+  });
+  event.sender.send("convert:progress", { id, inputPath, outputPath, progress: 100, status: "done" });
+
+  return { id, inputPath, outputPath, progress: 100, status: "done" };
+});
+
 ipcMain.handle("convert:files", async (event, payload) => {
   const files = Array.isArray(payload.files) ? payload.files : [];
   const outputDir = payload.outputDir;
@@ -208,7 +320,10 @@ ipcMain.handle("convert:files", async (event, payload) => {
     event.sender.send("convert:progress", { id, inputPath, status: "converting" });
 
     try {
-      const outputPath = await convertOne(inputPath, outputDir, mode, settings);
+      const outputPath = await convertOne(inputPath, outputDir, mode, settings, {
+        id,
+        sender: event.sender
+      });
       const doneResult = { id, inputPath, outputPath, status: "done" };
       event.sender.send("convert:progress", doneResult);
       results.push(doneResult);
@@ -249,6 +364,9 @@ async function checkForUpdates() {
 
     const release = await response.json();
     const latestVersion = normalizeVersion(release.tag_name || release.name || "");
+    const installerAsset = Array.isArray(release.assets)
+      ? release.assets.find((asset) => /installer-x64\.exe$/i.test(asset.name || ""))
+      : null;
 
     return {
       ok: true,
@@ -256,7 +374,14 @@ async function checkForUpdates() {
       latestVersion,
       hasUpdate: isNewerVersion(latestVersion, currentVersion),
       releaseUrl: release.html_url,
-      releaseName: release.name || release.tag_name
+      releaseName: release.name || release.tag_name,
+      installerAsset: installerAsset
+        ? {
+            name: installerAsset.name,
+            size: installerAsset.size,
+            downloadUrl: installerAsset.browser_download_url
+          }
+        : null
     };
   } catch (error) {
     return {
@@ -265,6 +390,58 @@ async function checkForUpdates() {
       error: error.message
     };
   }
+}
+
+async function downloadUpdateInstaller(asset, sender) {
+  if (!asset || !asset.downloadUrl || !asset.name) {
+    throw new Error("Installer asset is missing from the latest release.");
+  }
+
+  const response = await fetch(asset.downloadUrl, {
+    headers: {
+      "User-Agent": `${REPO_NAME}/${app.getVersion()}`
+    }
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Installer download failed with ${response.status}.`);
+  }
+
+  const totalBytes = Number(response.headers.get("content-length")) || asset.size || 0;
+  const installerPath = path.join(updatesDir, sanitizeFileName(asset.name));
+  const tmpPath = `${installerPath}.tmp`;
+  const fileStream = fs.createWriteStream(tmpPath);
+  let downloadedBytes = 0;
+
+  await new Promise((resolve, reject) => {
+    Readable.fromWeb(response.body)
+      .on("data", (chunk) => {
+        downloadedBytes += chunk.length;
+
+        if (sender && totalBytes > 0) {
+          sender.send("updates:downloadProgress", {
+            downloadedBytes,
+            totalBytes,
+            progress: Math.min(100, Math.floor((downloadedBytes / totalBytes) * 100))
+          });
+        }
+      })
+      .on("error", reject)
+      .pipe(fileStream)
+      .on("error", reject)
+      .on("finish", resolve);
+  });
+
+  fs.renameSync(tmpPath, installerPath);
+  if (sender) {
+    sender.send("updates:downloadProgress", {
+      downloadedBytes,
+      totalBytes,
+      progress: 100
+    });
+  }
+
+  return installerPath;
 }
 
 function createTray() {
@@ -307,8 +484,28 @@ function buildTrayMenu() {
       click: async () => {
         const result = await checkForUpdates();
 
-        if (result.ok && result.hasUpdate && result.releaseUrl) {
-          await shell.openExternal(result.releaseUrl);
+        if (result.ok && result.hasUpdate && result.installerAsset) {
+          const answer = await dialog.showMessageBox({
+            type: "info",
+            title: "GFX Ai Conv",
+            message: `${result.releaseName || result.latestVersion} is available.`,
+            detail: "Download the installer and launch it now?",
+            buttons: ["Download", "Later"],
+            defaultId: 0,
+            cancelId: 1
+          });
+
+          if (answer.response === 0) {
+            const installerPath = await downloadUpdateInstaller(result.installerAsset, mainWindow ? mainWindow.webContents : null);
+            spawn(installerPath, [], {
+              detached: true,
+              stdio: "ignore",
+              windowsHide: false
+            }).unref();
+            isQuitting = true;
+            app.quit();
+          }
+
           return;
         }
 
@@ -345,11 +542,11 @@ function createTrayImage(size) {
   return nativeImage.createFromDataURL(TRAY_ICON_DATA_URL).resize({ width: size, height: size });
 }
 
-async function convertOne(inputPath, outputDir, mode, settings) {
+async function convertOne(inputPath, outputDir, mode, settings, progress = {}) {
   const inputStats = fs.statSync(inputPath);
 
   if (inputStats.isDirectory()) {
-    return convertDirectory(inputPath, outputDir, mode, settings);
+    return convertDirectory(inputPath, outputDir, mode, settings, progress);
   }
 
   if (mode === "png") {
@@ -370,7 +567,7 @@ async function convertOne(inputPath, outputDir, mode, settings) {
       outputPath
     ];
 
-    await runFfmpeg(args);
+    await runFfmpeg(args, progress);
     return outputPath;
   }
 
@@ -411,11 +608,14 @@ async function convertOne(inputPath, outputDir, mode, settings) {
     outputPath
   ];
 
-  await runFfmpeg(args);
+  await runFfmpeg(withProgressArgs(args), {
+    ...progress,
+    durationSeconds: duration
+  });
   return outputPath;
 }
 
-async function convertDirectory(inputPath, outputDir, mode, settings) {
+async function convertDirectory(inputPath, outputDir, mode, settings, progress = {}) {
   const sequence = findExrSequence(inputPath);
 
   if (mode === "png") {
@@ -436,7 +636,7 @@ async function convertDirectory(inputPath, outputDir, mode, settings) {
       outputPath
     ];
 
-    await runFfmpeg(args);
+    await runFfmpeg(args, progress);
     return outputPath;
   }
 
@@ -481,7 +681,10 @@ async function convertDirectory(inputPath, outputDir, mode, settings) {
     outputPath
   ];
 
-  await runFfmpeg(args);
+  await runFfmpeg(withProgressArgs(args), {
+    ...progress,
+    durationSeconds: duration
+  });
   return outputPath;
 }
 
@@ -505,13 +708,46 @@ function buildVideoFilters(align16) {
   return `${scale},format=yuv420p`;
 }
 
-function runFfmpeg(args) {
+function withProgressArgs(args) {
+  const [firstArg, ...restArgs] = args;
+  return [firstArg, "-nostats", "-progress", "pipe:1", ...restArgs];
+}
+
+function runFfmpeg(args, progress = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, {
       windowsHide: true
     });
 
+    if (progress.trackActive !== false) {
+      activeConversion = { child, cancelled: false };
+    }
     let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      const lines = chunk.toString().split(/\r?\n/);
+
+      for (const line of lines) {
+        const [key, value] = line.split("=");
+
+        if (!key || !value || !progress.sender || !progress.id || !progress.durationSeconds) {
+          continue;
+        }
+
+        const seconds = parseProgressSeconds(key, value);
+
+        if (seconds === null) {
+          continue;
+        }
+
+        const percent = Math.max(0, Math.min(99, Math.floor((seconds / progress.durationSeconds) * 100)));
+        progress.sender.send("convert:progress", {
+          id: progress.id,
+          progress: percent,
+          status: "converting"
+        });
+      }
+    });
 
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -520,6 +756,17 @@ function runFfmpeg(args) {
     child.on("error", reject);
 
     child.on("close", (code) => {
+      const cancelled = activeConversion && activeConversion.child === child && activeConversion.cancelled;
+
+      if (activeConversion && activeConversion.child === child) {
+        activeConversion = null;
+      }
+
+      if (cancelled) {
+        reject(new Error("Conversion stopped."));
+        return;
+      }
+
       if (code === 0) {
         resolve();
         return;
@@ -528,6 +775,25 @@ function runFfmpeg(args) {
       reject(new Error(compactFfmpegError(stderr) || `FFmpeg exited with code ${code}.`));
     });
   });
+}
+
+function parseProgressSeconds(key, value) {
+  if (key === "out_time_us" || key === "out_time_ms") {
+    const number = Number.parseInt(value, 10);
+    return Number.isNaN(number) ? null : number / 1000000;
+  }
+
+  if (key === "out_time") {
+    const match = value.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
+
+    if (!match) {
+      return null;
+    }
+
+    return (Number(match[1]) * 3600) + (Number(match[2]) * 60) + Number(match[3]);
+  }
+
+  return null;
 }
 
 function findExrSequence(directoryPath) {
@@ -598,7 +864,7 @@ function normalizeFfmpegPath(filePath) {
 
 function uniqueOutputPath(outputDir, inputPath, extension, suffix = "") {
   const parsed = path.parse(inputPath);
-  const safeName = parsed.name.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim() || "converted";
+  const safeName = sanitizeFileName(parsed.name) || "converted";
   let candidate = path.join(outputDir, `${safeName}${suffix}${extension}`);
   let index = 1;
 
@@ -608,6 +874,10 @@ function uniqueOutputPath(outputDir, inputPath, extension, suffix = "") {
   }
 
   return candidate;
+}
+
+function sanitizeFileName(fileName) {
+  return String(fileName || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim();
 }
 
 function compactFfmpegError(stderr) {
