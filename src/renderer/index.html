@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GFX Ai Conv</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>GFX Ai Conv</h1>
+          <p id="versionLabel">Local converter</p>
+        </div>
+        <button class="icon-button" id="updateButton" title="Check for updates" type="button">↻</button>
+      </header>
+
+      <section class="toolbar" aria-label="Conversion mode">
+        <button class="mode-button active" type="button" data-mode="png">PNG</button>
+        <button class="mode-button" type="button" data-mode="video">H.264 MP4</button>
+      </section>
+
+      <section class="controls">
+        <div class="output-row">
+          <label for="outputDir">Output folder</label>
+          <input id="outputDir" type="text" readonly placeholder="Choose a folder">
+          <button id="chooseOutput" type="button">Choose</button>
+        </div>
+
+        <div class="video-settings hidden" id="videoSettings">
+          <label for="durationInput">Duration</label>
+          <input id="durationInput" type="number" min="4" max="15" step="1" value="4">
+
+          <label class="checkline" for="align16Input">
+            <input id="align16Input" type="checkbox" checked>
+            <span>16 px grid</span>
+          </label>
+
+          <label for="qualityInput">Quality</label>
+          <select id="qualityInput">
+            <option value="visual">Visually lossless</option>
+            <option value="lossless">Lossless H.264</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="dropzone" id="dropzone">
+        <input id="filePicker" type="file" multiple>
+        <div class="dropzone-inner">
+          <strong>Drop files here</strong>
+          <span>or click to choose files</span>
+        </div>
+      </section>
+
+      <section class="status-panel">
+        <div class="status-header">
+          <h2>Queue</h2>
+          <button id="openOutput" type="button">Open folder</button>
+        </div>
+        <ul class="file-list" id="fileList"></ul>
+      </section>
+
+      <div class="toast hidden" id="toast"></div>
+    </main>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>
