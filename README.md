@@ -64,8 +64,10 @@ The app checks the latest GitHub Release at startup and from the update button i
 
 ## Windows Downloads
 
-- Use the `installer` `.exe` for normal installation.
-- Use the `unpacked` `.zip` if you want to run without installing.
+- Use the `installer` `.exe` for normal installation. This is the recommended team build.
+- If a `win.zip` build is provided, extract the whole archive to a normal folder before running `GFX Ai Conv.exe`.
+
+Do not run `GFX Ai Conv.exe` directly from WinRAR/7-Zip preview. That launches the app from a temporary folder such as `Rar$EXa...` without all required Electron resources and can crash before the app code starts.
 
 The Electron portable self-extracting target is intentionally not used because it can crash on some Windows systems when launched from a temporary extraction folder.
 
@@ -77,11 +79,19 @@ H.264 is normally a lossy delivery codec. The default video quality is set to vi
 
 ### Which file should I download?
 
-Use the `installer` `.exe` for the normal app install. Use the `win.zip` archive if you want to run the app without installing it.
+Use the `installer` `.exe` for the normal app install. This is the recommended option.
 
 ### Why is there no portable `.exe` anymore?
 
 The Electron portable self-extracting build can crash on some Windows systems because it runs from a temporary extraction folder. The app now ships as an installer plus an unpacked zip, which is more reliable.
+
+### Why can the zip crash when I double-click the exe inside WinRAR?
+
+Electron apps need the executable and the `resources` folder together. Archive preview tools often launch only the selected `.exe` from a temporary folder. Extract the full archive first, or use the installer.
+
+### Does the app stay in the tray?
+
+Yes. Closing or minimizing the window hides it to the system tray. Use the tray menu to open the window, open the saved output folder, check updates, or quit the app completely.
 
 ### Where are converted files saved?
 

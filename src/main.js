@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -8,6 +8,7 @@ const ffmpegStaticPath = require("ffmpeg-static");
 
 const REPO_OWNER = "intime8";
 const REPO_NAME = "GFX_Ai_conv";
+const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAD4SURBVFhH7ZSxEYJQFATpwrbogw5sQKvAwBJISYwowIyMkMAavgwc3hcOxuS+ge7MJnrOPnU0+zNzKE4hpcgSNXKKLFEjp8gSNXKKLFEjp8gSNXKKLFEjp8gSNXKKLFEjp8gSNdq3DJc+LGjDUW7XIkvUaNNzEzok30lyQPTO+ybk0XN53SQ44Nqi/vm7VSJL1EiZ14+pf6+mx14HTXR1uXqNElmiRsqvH7D1FcyH+Q8oqnAbUwPzpzCY8IDoaxAkOWBU/RcsfpZ7IkvUyCmyRI2cIkvUyCmyRI2cIkvUyCmyRI2cIkvUyCmyRI2cIkvUyCmyP0+WPQGxDZvikCMZ/QAAAABJRU5ErkJggg==";
 const appDataRoot = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
 const stableUserDataPath = path.join(appDataRoot, "GFX Ai Conv");
 const logDir = path.join(stableUserDataPath, "logs");
@@ -51,26 +52,25 @@ function resolveBundledBinary(binaryPath) {
 
 const ffmpegPath = resolveBundledBinary(ffmpegStaticPath);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+let mainWindow = null;
+let tray = null;
+let isQuitting = false;
 
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    const [win] = BrowserWindow.getAllWindows();
-
-    if (!win) {
-      return;
-    }
-
-    if (win.isMinimized()) {
-      win.restore();
-    }
-
-    win.focus();
+    showMainWindow();
   });
 }
 
 function createWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    showMainWindow();
+    return mainWindow;
+  }
+
+  const windowIcon = createTrayImage(32);
   const win = new BrowserWindow({
     width: 1080,
     height: 760,
@@ -78,6 +78,7 @@ function createWindow() {
     minHeight: 620,
     backgroundColor: "#f5f6f8",
     title: "GFX Ai Conv",
+    icon: windowIcon,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -86,7 +87,26 @@ function createWindow() {
     }
   });
 
+  mainWindow = win;
+  win.on("close", (event) => {
+    if (isQuitting) {
+      return;
+    }
+
+    event.preventDefault();
+    win.hide();
+  });
+  win.on("minimize", (event) => {
+    event.preventDefault();
+    win.hide();
+  });
+  win.on("closed", () => {
+    if (mainWindow === win) {
+      mainWindow = null;
+    }
+  });
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
+  return win;
 }
 
 app.whenReady().then(() => {
@@ -94,6 +114,7 @@ app.whenReady().then(() => {
     return;
   }
 
+  createTray();
   createWindow();
 
   app.on("activate", () => {
@@ -103,8 +124,12 @@ app.whenReady().then(() => {
   });
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (isQuitting && process.platform !== "darwin") {
     app.quit();
   }
 });
@@ -149,48 +174,7 @@ ipcMain.handle("settings:save", (_event, settings) => {
 });
 
 ipcMain.handle("updates:check", async () => {
-  const currentVersion = app.getVersion();
-  const latestUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
-
-  try {
-    const response = await fetch(latestUrl, {
-      headers: {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": `${REPO_NAME}/${currentVersion}`
-      }
-    });
-
-    if (response.status === 404) {
-      return {
-        ok: true,
-        hasUpdate: false,
-        currentVersion,
-        message: "No GitHub Releases yet."
-      };
-    }
-
-    if (!response.ok) {
-      throw new Error(`GitHub responded with ${response.status}`);
-    }
-
-    const release = await response.json();
-    const latestVersion = normalizeVersion(release.tag_name || release.name || "");
-
-    return {
-      ok: true,
-      currentVersion,
-      latestVersion,
-      hasUpdate: isNewerVersion(latestVersion, currentVersion),
-      releaseUrl: release.html_url,
-      releaseName: release.name || release.tag_name
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      currentVersion,
-      error: error.message
-    };
-  }
+  return checkForUpdates();
 });
 
 ipcMain.handle("convert:files", async (event, payload) => {
@@ -236,6 +220,129 @@ ipcMain.handle("convert:files", async (event, payload) => {
 
   return results;
 });
+
+async function checkForUpdates() {
+  const currentVersion = app.getVersion();
+  const latestUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+
+  try {
+    const response = await fetch(latestUrl, {
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": `${REPO_NAME}/${currentVersion}`
+      }
+    });
+
+    if (response.status === 404) {
+      return {
+        ok: true,
+        hasUpdate: false,
+        currentVersion,
+        message: "No GitHub Releases yet."
+      };
+    }
+
+    if (!response.ok) {
+      throw new Error(`GitHub responded with ${response.status}`);
+    }
+
+    const release = await response.json();
+    const latestVersion = normalizeVersion(release.tag_name || release.name || "");
+
+    return {
+      ok: true,
+      currentVersion,
+      latestVersion,
+      hasUpdate: isNewerVersion(latestVersion, currentVersion),
+      releaseUrl: release.html_url,
+      releaseName: release.name || release.tag_name
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      currentVersion,
+      error: error.message
+    };
+  }
+}
+
+function createTray() {
+  if (tray) {
+    return;
+  }
+
+  tray = new Tray(createTrayImage(16));
+  tray.setToolTip("GFX Ai Conv");
+  tray.setContextMenu(buildTrayMenu());
+  tray.on("click", showMainWindow);
+  tray.on("double-click", showMainWindow);
+}
+
+function buildTrayMenu() {
+  return Menu.buildFromTemplate([
+    {
+      label: "Open",
+      click: showMainWindow
+    },
+    {
+      label: "Open output folder",
+      click: () => {
+        const outputDir = loadSettings().outputDir;
+
+        if (outputDir && fs.existsSync(outputDir)) {
+          shell.openPath(outputDir);
+          return;
+        }
+
+        dialog.showMessageBox({
+          type: "info",
+          title: "GFX Ai Conv",
+          message: "Output folder is not set yet."
+        });
+      }
+    },
+    {
+      label: "Check updates",
+      click: async () => {
+        const result = await checkForUpdates();
+
+        if (result.ok && result.hasUpdate && result.releaseUrl) {
+          await shell.openExternal(result.releaseUrl);
+          return;
+        }
+
+        dialog.showMessageBox({
+          type: result.ok ? "info" : "warning",
+          title: "GFX Ai Conv",
+          message: result.ok ? "You are on the latest version." : `Update check failed: ${result.error}`
+        });
+      }
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+}
+
+function showMainWindow() {
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createWindow();
+
+  if (win.isMinimized()) {
+    win.restore();
+  }
+
+  win.show();
+  win.focus();
+}
+
+function createTrayImage(size) {
+  return nativeImage.createFromDataURL(TRAY_ICON_DATA_URL).resize({ width: size, height: size });
+}
 
 async function convertOne(inputPath, outputDir, mode, settings) {
   if (mode === "png") {
