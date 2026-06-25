@@ -142,7 +142,7 @@ select {
 }
 
 .video-settings {
-  grid-template-columns: 90px 100px 130px 130px 70px 190px;
+  grid-template-columns: 78px 84px 112px 120px 58px 170px 64px 150px;
   margin-top: 12px;
 }
 

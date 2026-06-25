@@ -18,7 +18,8 @@ const DEFAULT_SETTINGS = {
   video: {
     durationSeconds: 4,
     align16: true,
-    quality: "visual"
+    quality: "visual",
+    encoder: "gpu"
   }
 };
 
@@ -262,9 +263,10 @@ async function convertOne(inputPath, outputDir, mode, settings) {
   const outputPath = uniqueOutputPath(outputDir, inputPath, ".mp4", "_h264");
   const duration = clampInteger(settings.durationSeconds, 4, 15, 4);
   const filters = buildVideoFilters(Boolean(settings.align16));
-  const qualityArgs = settings.quality === "lossless"
-    ? ["-preset", "slow", "-crf", "0"]
-    : ["-preset", "slow", "-crf", "16"];
+  const qualityArgs = buildQualityArgs(settings.encoder, settings.quality === "lossless");
+  const encoderArgs = settings.encoder === "cpu"
+    ? ["-c:v", "libx264"]
+    : ["-c:v", "h264_nvenc"];
 
   const args = [
     "-hide_banner",
@@ -280,8 +282,7 @@ async function convertOne(inputPath, outputDir, mode, settings) {
     "-an",
     "-vf",
     filters,
-    "-c:v",
-    "libx264",
+    ...encoderArgs,
     ...qualityArgs,
     "-pix_fmt",
     "yuv420p",
@@ -298,6 +299,18 @@ async function convertOne(inputPath, outputDir, mode, settings) {
 
   await runFfmpeg(args);
   return outputPath;
+}
+
+function buildQualityArgs(encoder, lossless) {
+  if (encoder === "cpu") {
+    return lossless
+      ? ["-preset", "slow", "-crf", "0"]
+      : ["-preset", "slow", "-crf", "16"];
+  }
+
+  return lossless
+    ? ["-preset", "p7", "-tune", "lossless", "-rc", "constqp", "-qp", "0"]
+    : ["-preset", "p7", "-tune", "hq", "-rc", "vbr", "-cq", "16", "-b:v", "0"];
 }
 
 function buildVideoFilters(align16) {
@@ -417,6 +430,7 @@ function sanitizeSettings(settings) {
   const mode = incoming.mode === "video" ? "video" : "png";
   const outputDir = typeof incoming.outputDir === "string" ? incoming.outputDir : "";
   const quality = incomingVideo.quality === "lossless" ? "lossless" : "visual";
+  const encoder = incomingVideo.encoder === "cpu" ? "cpu" : "gpu";
 
   return {
     mode,
@@ -424,7 +438,8 @@ function sanitizeSettings(settings) {
     video: {
       durationSeconds: clampInteger(incomingVideo.durationSeconds, 4, 15, DEFAULT_SETTINGS.video.durationSeconds),
       align16: incomingVideo.align16 !== false,
-      quality
+      quality,
+      encoder
     }
   };
 }

@@ -5,7 +5,7 @@ Local Windows converter with a small drag-and-drop interface.
 ## Modes
 
 - **PNG**: converts supported image/video sources to `.png`.
-- **H.264 MP4**: converts supported video sources to `.mp4` with H.264 video, BT.709/sRGB-friendly color metadata, integer duration from 4 to 15 seconds, and optional 16 px dimension alignment.
+- **H.264 MP4**: converts supported video sources to `.mp4` with H.264 video, NVIDIA NVENC by default, BT.709/sRGB-friendly color metadata, integer duration from 4 to 15 seconds, and optional 16 px dimension alignment.
 
 FFmpeg is bundled with the app through `ffmpeg-static`.
 
@@ -18,6 +18,7 @@ The app saves settings automatically when you change them:
 - video duration
 - 16 px grid option
 - video quality option
+- video encoder option: NVIDIA GPU or CPU x264
 
 Settings are stored locally at:
 
@@ -70,7 +71,7 @@ The Electron portable self-extracting target is intentionally not used because i
 
 ## Notes
 
-H.264 is normally a lossy delivery codec. The default video quality is set to visually lossless CRF 16. A lossless H.264 option is available, but files can become much larger and may be less convenient for downstream tools.
+H.264 is normally a lossy delivery codec. The default video quality is set to visually lossless CQ 16 for NVIDIA GPU encoding and CRF 16 for CPU x264 encoding. A lossless H.264 option is available, but files can become much larger and may be less convenient for downstream tools.
 
 ## FAQ
 
@@ -96,7 +97,15 @@ PNG mode takes the first video/image frame FFmpeg can read and writes it as `.pn
 
 ### What does H.264 MP4 mode do?
 
-H.264 MP4 mode writes `.mp4` files with `libx264`, `yuv420p`, BT.709 color metadata, and an sRGB transfer tag. The app loops short inputs if needed and trims the result to the selected integer duration from 4 to 15 seconds.
+H.264 MP4 mode writes `.mp4` files with `h264_nvenc` by default, `yuv420p`, BT.709 color metadata, and an sRGB transfer tag. The app loops short inputs if needed and trims the result to the selected integer duration from 4 to 15 seconds.
+
+### Why is NVIDIA GPU the default encoder?
+
+The target machines use NVIDIA GPUs, so the default video encoder is `h264_nvenc`. It is usually much faster than CPU encoding and keeps the app responsive during batches.
+
+### What if GPU conversion does not work?
+
+Switch the video `Encoder` setting from `NVIDIA GPU` to `CPU x264`. This uses the slower software encoder and is useful if a machine has an old driver, no available NVENC session, or a GPU/driver-specific FFmpeg error.
 
 ### What does 16 px grid mean?
 

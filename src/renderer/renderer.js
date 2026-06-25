@@ -15,6 +15,7 @@ const videoSettings = document.querySelector("#videoSettings");
 const durationInput = document.querySelector("#durationInput");
 const align16Input = document.querySelector("#align16Input");
 const qualityInput = document.querySelector("#qualityInput");
+const encoderInput = document.querySelector("#encoderInput");
 const openOutputButton = document.querySelector("#openOutput");
 const toast = document.querySelector("#toast");
 const versionLabel = document.querySelector("#versionLabel");
@@ -99,6 +100,7 @@ function bindEvents() {
   });
   align16Input.addEventListener("change", saveCurrentSettings);
   qualityInput.addEventListener("change", saveCurrentSettings);
+  encoderInput.addEventListener("change", saveCurrentSettings);
 }
 
 async function hydrateVersion() {
@@ -115,6 +117,7 @@ async function hydrateSettings() {
   durationInput.value = clampInteger(video.durationSeconds, 4, 15, 4);
   align16Input.checked = video.align16 !== false;
   qualityInput.value = video.quality === "lossless" ? "lossless" : "visual";
+  encoderInput.value = video.encoder === "cpu" ? "cpu" : "gpu";
   setMode(settings.mode === "video" ? "video" : "png", false);
 }
 
@@ -166,7 +169,8 @@ function getSettings() {
   return {
     durationSeconds: durationInput.value,
     align16: align16Input.checked,
-    quality: qualityInput.value === "lossless" ? "lossless" : "visual"
+    quality: qualityInput.value === "lossless" ? "lossless" : "visual",
+    encoder: encoderInput.value === "cpu" ? "cpu" : "gpu"
   };
 }
 
