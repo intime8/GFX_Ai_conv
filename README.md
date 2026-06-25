@@ -22,7 +22,7 @@ npm.cmd run dev
 npm.cmd run dist
 ```
 
-The Windows installer and portable executable are written to `dist/`.
+The Windows installer and unpacked zip are written to `dist/`.
 
 ## GitHub Release Build
 
@@ -33,11 +33,18 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-GitHub Actions will build the Windows `.exe` files and attach them to a GitHub Release.
+GitHub Actions will build the Windows installer `.exe` and unpacked `.zip`, then attach them to a GitHub Release.
 
 ## Updates
 
 The app checks the latest GitHub Release at startup and from the update button in the header. In this first version it opens the release page for download instead of silently installing updates.
+
+## Windows Downloads
+
+- Use the `installer` `.exe` for normal installation.
+- Use the `unpacked` `.zip` if you want to run without installing.
+
+The Electron portable self-extracting target is intentionally not used because it can crash on some Windows systems when launched from a temporary extraction folder.
 
 ## Notes
 

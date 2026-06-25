@@ -1,6 +1,6 @@
 {
   "name": "gfx_ai_conv",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local drag-and-drop converter for PNG and H.264 MP4 production files.",
   "main": "src/main.js",
   "author": "intime8",
@@ -11,7 +11,7 @@
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win",
-    "dist:portable": "electron-builder --win portable"
+    "dist:zip": "electron-builder --win zip"
   },
   "dependencies": {
     "ffmpeg-static": "^5.2.0"
@@ -46,7 +46,7 @@
           ]
         },
         {
-          "target": "portable",
+          "target": "zip",
           "arch": [
             "x64"
           ]
@@ -60,9 +60,6 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
     }
   }
 }

@@ -2,11 +2,33 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 const ffmpegStaticPath = require("ffmpeg-static");
 
 const REPO_OWNER = "intime8";
 const REPO_NAME = "GFX_Ai_conv";
+const appDataRoot = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+const stableUserDataPath = path.join(appDataRoot, "GFX Ai Conv");
+const logDir = path.join(stableUserDataPath, "logs");
+
+app.disableHardwareAcceleration();
+fs.mkdirSync(stableUserDataPath, { recursive: true });
+app.setPath("userData", stableUserDataPath);
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
+app.commandLine.appendSwitch("disable-gpu-program-cache");
+
+fs.mkdirSync(logDir, { recursive: true });
+
+process.on("uncaughtException", (error) => {
+  writeCrashLog("uncaughtException", error);
+  dialog.showErrorBox("GFX Ai Conv crashed", error.stack || error.message || String(error));
+  app.quit();
+});
+
+process.on("unhandledRejection", (reason) => {
+  writeCrashLog("unhandledRejection", reason);
+});
 
 function resolveBundledBinary(binaryPath) {
   if (!binaryPath) {
@@ -17,6 +39,25 @@ function resolveBundledBinary(binaryPath) {
 }
 
 const ffmpegPath = resolveBundledBinary(ffmpegStaticPath);
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const [win] = BrowserWindow.getAllWindows();
+
+    if (!win) {
+      return;
+    }
+
+    if (win.isMinimized()) {
+      win.restore();
+    }
+
+    win.focus();
+  });
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -38,6 +79,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) {
+    return;
+  }
+
   createWindow();
 
   app.on("activate", () => {
@@ -326,4 +371,15 @@ function isNewerVersion(latest, current) {
   }
 
   return false;
+}
+
+function writeCrashLog(kind, error) {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const message = error && error.stack ? error.stack : String(error);
+    const body = `[${new Date().toISOString()}] ${kind}\n${message}\n`;
+    fs.writeFileSync(path.join(logDir, `${timestamp}-${kind}.log`), body, "utf8");
+  } catch (_error) {
+    // Nothing else is safe to do here.
+  }
 }
